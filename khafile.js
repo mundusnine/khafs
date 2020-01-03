@@ -1,4 +1,4 @@
-let project = new Project('haxeui-kha-extended');
+let project = new Project('khafs');
 project.addAssets('Assets/wasmfs.js');
 project.addSources('Sources');
 resolve(project);
