@@ -50,12 +50,15 @@ class FileSystem {
 	}
 	
 	static public function fixPath(path:String){
-		#if kha_webgl
+		#if (kha_webgl || js)
 		var systemId = "None";
 		var userAgent = untyped navigator.userAgent.toLowerCase();
 		if (userAgent.indexOf(' electron/') > -1) {
 			var pp = untyped window.process.platform;
 			systemId = pp == "win32" ? "Windows" : (pp == "darwin" ? "OSX" : "Linux");
+		} 
+		else{ // We are in the browser or wasi ergo posix env
+			systemId = "Linux";
 		}
 		#else
 		var systemId = kha.System.systemId;
@@ -75,16 +78,14 @@ class FileSystem {
 					var temp = home.split("\n");
 					temp.pop();
 					home = temp.join("");
-					#elseif kha_kore
+					#elseif (kha_kore || sys)
 					var names = Sys.programPath().split('/');
 					names.pop(); 
 					path = names.join('/');
 
-					#elseif kha_webgl
-					var userAgent = untyped navigator.userAgent.toLowerCase();
-					if (userAgent.indexOf(' electron/') > -1) {
-						home = untyped process.env.HOME || process.env.HOMEPATH || process.env.USERPROFILE;
-					}
+					#elseif (kha_webgl || js)
+					// We are in a virtualized, secure wasmfs situation
+					home = './';
 					
 					#end
 					if(path.charAt(0) == "~"){
@@ -116,9 +117,9 @@ class FileSystem {
 		Krom.sysCommand(cmd);
 		var str = haxe.io.Bytes.ofData(Krom.loadBlob(save)).toString();
 		return str == "true";
-		#elseif kha_kore
+		#elseif (kha_kore || sys)
 		return sys.FileSystem.exists(path);
-		#elseif kha_webgl
+		#elseif (kha_webgl || js)
 		return wasm.fs.existsSync(path);
 		#else
 		return false;
@@ -143,25 +144,22 @@ class FileSystem {
 		lastPath = path;
 		var str = haxe.io.Bytes.ofData(Krom.loadBlob(save)).toString();
 		var files = str.split("\n");
-		#elseif kha_kore
+		#elseif (kha_kore || sys)
 
 		path = fixPath(path);
 		var files = sys.FileSystem.isDirectory(path) ? sys.FileSystem.readDirectory(path) : [];
 
-		#elseif kha_webgl
+		#elseif (kha_webgl || js)
 
 		var files:Array<String> = [];
-
-		var userAgent = untyped navigator.userAgent.toLowerCase();
-		if (userAgent.indexOf(' electron/') > -1) {
-			try {
-				path = fixPath(path);
-				files = wasm.fs.readdirSync(path);
-			}
-			catch(e:Dynamic) {
-				// Non-directory item selected
-			}
+		try {
+			path = fixPath(path);
+			files = wasm.fs.readdirSync(path);
 		}
+		catch(e:Dynamic) {
+			// Non-directory item selected
+		}
+		
 
 		#else
 
@@ -191,10 +189,10 @@ class FileSystem {
 	public static function isDirectory(path:String):Bool {
 		#if kha_krom
 		return path.charAt(path.length-1)=="/";
-		#elseif kha_kore
+		#elseif (kha_kore || sys)
 		return sys.FileSystem.isDirectory(path);
-		#elseif kha_webgl
-		return try wasm.fs.statSync(path).isDirectory() catch (e:Dynamic) false;
+		#elseif (kha_webgl || js)
+		return try FileSystem.stat(path).isDirectory() catch (e:Dynamic) false;
 		#else
 		return false;
 		#end
@@ -216,7 +214,7 @@ class FileSystem {
 		sys.FileSystem.createDirectory(path);
 		if(onDone!= null)
 			onDone();
-		#elseif kha_webgl
+		#elseif (kha_webgl || js)
 		try  wasm.fs.mkdir(path,null,function(err){
 			if(err!=null) throw err;
 			else if(onDone!= null)
@@ -233,10 +231,10 @@ class FileSystem {
 			#if kha_krom
 			var buffer = Krom.loadBlob(path);
 			onDone(buffer.toString());// @:Incomplete we need to test this
-			#elseif kha_kore
+			#elseif (kha_kore || sys)
 			data = sys.io.File.getContent(path);
 			onDone();
-			#elseif kha_webgl
+			#elseif (kha_webgl || js)
 			wasm.fs.readFile(path,{encoding:'utf8'},function (err,data){
 				if(err!=null) throw err;
 				onDone(data);
@@ -247,6 +245,13 @@ class FileSystem {
 			
 		}
 	}
+	public static function stat(path:String){
+		#if (kha_kore || sys)
+		return sys.FileSystem.stat(path);
+		#else 
+		return wasm.fs.statSync(path);
+		#end
+	}
 
 	#end// !macro
 	public static function saveToFile(path:String,data:haxe.io.Bytes,onDone:Void->Void = null){
@@ -254,11 +259,11 @@ class FileSystem {
 		Krom.fileSaveBytes(path,data.getData());
 		if(onDone!= null)
 			onDone();
-		#elseif (kha_kore || macro)
+		#elseif (kha_kore || sys)
 		sys.io.File.saveBytes(path,data);
 		if(onDone!= null)
 			onDone();
-		#elseif kha_webgl
+		#elseif (kha_webgl || js)
 		wasm.fs.writeFile(path,data,null,function (err){
 			if(err!=null) throw err;
 			else if(onDone!= null)
