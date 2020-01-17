@@ -125,6 +125,7 @@ class FileSystem {
 		return false;
 		#end
 	}
+	//@TODO: rename to readDirectory like the haxe FileSystem
     static public function getFiles(path:String, folderOnly =false){
 
         #if kha_krom
@@ -224,7 +225,32 @@ class FileSystem {
 		throw "Target platform doesn't support creating a directory";
 		#end
 	}
-	
+	public static function getBytes(path:String,onDone:kha.Blob->Void,onError:kha.AssetError->Void =null) {
+		if(FileSystem.exists(path)){
+			var data:kha.Blob;
+			#if kha_krom
+			var buffer = Krom.loadBlob(path);
+			onDone(buffer);// @:Incomplete we need to test this
+			#elseif (kha_kore || sys)
+			data = kha.Blob.fromBytes(sys.io.File.getBytes(path));
+			onDone(data);
+			#elseif (kha_webgl || js)
+			wasm.fs.readFile(path,null,function (err,p_data){
+				if(err!=null){
+					if(onError != null)
+						onError({url: path,error: err});
+					else 
+						throw err;
+					return;
+				}
+				onDone(kha.Blob.fromBytes(p_data));
+			});
+			#else
+			throw "Target platform doesn't support saving data to files";
+			#end
+			
+		}
+	}
 	public static function getContent(path:String,onDone:String->Void):Void{
 		if(FileSystem.exists(path)){
 			var data = "";
@@ -233,7 +259,7 @@ class FileSystem {
 			onDone(buffer.toString());// @:Incomplete we need to test this
 			#elseif (kha_kore || sys)
 			data = sys.io.File.getContent(path);
-			onDone();
+			onDone(data);
 			#elseif (kha_webgl || js)
 			wasm.fs.readFile(path,{encoding:'utf8'},function (err,data){
 				if(err!=null) throw err;
