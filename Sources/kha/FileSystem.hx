@@ -1,6 +1,11 @@
 package kha;
 
 #if (kha_html5 &&js)
+import js.html.idb.Database;
+import js.html.idb.OpenDBRequest;
+import js.html.idb.Transaction;
+import js.html.idb.TransactionMode;
+import js.html.StorageType;
 import js.html.CanvasElement;
 import js.Browser.document;
 import js.Browser.window;
@@ -15,6 +20,7 @@ class FileSystem {
 	static var lastPath:String = "";
 
 	#if ( kha_html5 && js)
+	static var db:Database;
 	static var wasm:kha.WasmFs;
 	static function includeJs(path:String,done:Void->Void){
 		var js:js.html.ScriptElement = cast(document.createElement("script"));
@@ -28,9 +34,29 @@ class FileSystem {
 		#if ( kha_html5 && js)
 		includeJs('./wasmfs.js',function(){
 			wasm = new WasmFs();
-			done();
+			includeJs('./dexie.js',function(){
+				var tdb:Dynamic = null;
+				untyped __js__('{0} = new Dexie("projects")',tdb);
+				tdb.version(1).stores({projects:''});
+				var out = function(){
+					db = tdb.backendDB();
+					done();
+				}
+				untyped __js__('tdb.open().then({0})',out);
+				// var request:OpenDBRequest = window.indexedDB.open("projects",{storage: StorageType.PERSISTENT, version: 1});
+				// request.onsuccess = function(event:Dynamic){
+				// 	db = request.result;
+				// 	done();
+				// };
+				// request.onerror = function(event:Dynamic){
+				// 	trace("FileSystem Database was not created, maybe your browser doesn't support it");
+				// 	done();
+				// };
+				// request.onupgradeneeded = function(event:Dynamic){
+				// 	event.target.result.createObjectStore("projects");//Create an object store in database;
+				// };
+			});
 		});
-		
 		// done();
 		#else
 		done();
@@ -120,7 +146,13 @@ class FileSystem {
 		#elseif (kha_kore || sys)
 		return sys.FileSystem.exists(path);
 		#elseif (kha_webgl || js)
-		return wasm.fs.existsSync(path);
+		var inDB = false;
+		if(db != null){
+			var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+			var store = transaction.objectStore("projects");
+			inDB = store.indexNames.contains(path);
+		}
+		return wasm.fs.existsSync(path) || inDB;
 		#else
 		return false;
 		#end
@@ -261,10 +293,26 @@ class FileSystem {
 			data = sys.io.File.getContent(path);
 			onDone(data);
 			#elseif (kha_webgl || js)
-			wasm.fs.readFile(path,{encoding:'utf8'},function (err,data){
-				if(err!=null) throw err;
-				onDone(data);
-			});
+			if(wasm.fs.existsSync(path)){
+				wasm.fs.readFile(path,{encoding:'utf8'},function (err,data){
+					if(err!=null) throw err;
+					onDone(data);
+				});
+			}
+			else{
+				// No need to check if db null, checked in exists();
+				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+				var store = transaction.objectStore("projects");
+				var req = store.get(path);
+				req.onsuccess =function(event){
+					FileSystem.saveToFile(path,event.target.result);
+					onDone(event.target.result.toString());
+				};
+				req.onerror = function(event){
+					trace('Error file at $path was not found');
+				};
+			}
+			
 			#else
 			throw "Target platform doesn't support saving data to files";
 			#end
@@ -292,8 +340,23 @@ class FileSystem {
 		#elseif (kha_webgl || js)
 		wasm.fs.writeFile(path,data,null,function (err){
 			if(err!=null) throw err;
-			else if(onDone!= null)
-				onDone();
+			if(db != null){
+				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+				var store = transaction.objectStore("projects");
+				store.put(data,path);
+				var req = store.get(path);
+				req.onsuccess =function(event){
+					trace('succeeded in writing $path');
+					if(onDone!= null)
+						onDone();
+				};
+				req.onerror = function(event){
+					trace('Was unable to create $path, maybe not enough space is available');
+					if(onDone!= null)
+						onDone();
+				};
+			}
+			
 		});
 		#else
 		throw "Target platform doesn't support saving data to files";
