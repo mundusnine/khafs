@@ -6,7 +6,9 @@ import js.html.idb.OpenDBRequest;
 import js.html.idb.Transaction;
 import js.html.idb.TransactionMode;
 import js.html.StorageType;
+import js.html.PermissionState;
 import js.html.CanvasElement;
+import js.Browser.navigator;
 import js.Browser.document;
 import js.Browser.window;
 import js.Syntax;
@@ -29,6 +31,42 @@ class FileSystem {
 		js.onload = done;
 		document.body.appendChild(js);
 	}
+	static function tryPersistWithoutPromtingUser(done:String->Void){
+		if (navigator.storage == null || navigator.storage.persisted == null) {
+			done("never");
+			return;
+		}
+		navigator.storage.persisted().then(function(persisted){
+			if (persisted) {
+				done("persisted");
+				return;
+			}
+			if (navigator.permissions == null || navigator.permissions.query == null) {
+				done("prompt"); // It MAY be successful to prompt. Don't know.
+				return;
+			}
+			navigator.permissions.query({
+				name: "persistent-storage"
+			}).then(function(permission){
+				if (permission.state == PermissionState.GRANTED) {
+					navigator.storage.persist().then(function(persisted){
+						if (persisted) {
+							done("persisted");
+							return;
+						} else {
+							throw "Failed to persist";
+						}
+					});
+				}
+				if (permission.state == PermissionState.PROMPT) {
+					done("prompt");
+					return;
+				}
+				done("never");
+				return;
+			});
+		});
+	}
 	#end
 	public static function init(done:Void->Void){
 		#if ( kha_html5 && js)
@@ -37,24 +75,32 @@ class FileSystem {
 			includeJs('./dexie.js',function(){
 				var tdb:Dynamic = null;
 				untyped __js__('{0} = new Dexie("projects")',tdb);
-				tdb.version(1).stores({projects:''});
-				var out = function(){
+				var create = function(e){
+					tdb.version(1).stores({projects:''});
 					db = tdb.backendDB();
+					tryPersistWithoutPromtingUser(function (result:String){
+						switch(result){
+							case "never":
+								trace("Not possible to persist storage");
+							case "persisted":
+								trace("Successfully persisted storage silently");
+							case "prompt":
+								trace("Not persisted, but we may prompt user when we want to.");
+						}
+						done();
+					});
+				};
+				var open = function(p_db){
+					db = p_db.backendDB();
+					trace("Opened DB with name: "+db.name);
+					untyped __js__('tdb.tables.forEach(function (table) {
+						console.log ("Found table: " + table.name);
+						console.log ("Table Schema: " +
+							JSON.stringify(table.schema, null, 1));
+					});');
 					done();
-				}
-				untyped __js__('tdb.open().then({0})',out);
-				// var request:OpenDBRequest = window.indexedDB.open("projects",{storage: StorageType.PERSISTENT, version: 1});
-				// request.onsuccess = function(event:Dynamic){
-				// 	db = request.result;
-				// 	done();
-				// };
-				// request.onerror = function(event:Dynamic){
-				// 	trace("FileSystem Database was not created, maybe your browser doesn't support it");
-				// 	done();
-				// };
-				// request.onupgradeneeded = function(event:Dynamic){
-				// 	event.target.result.createObjectStore("projects");//Create an object store in database;
-				// };
+				};
+				untyped __js__('tdb.open().then({0}).catch({1})',open,create);
 			});
 		});
 		// done();
@@ -355,6 +401,9 @@ class FileSystem {
 					if(onDone!= null)
 						onDone();
 				};
+			}else{
+				if(onDone!= null)
+					onDone();
 			}
 			
 		});
