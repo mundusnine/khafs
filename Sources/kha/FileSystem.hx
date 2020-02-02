@@ -23,6 +23,7 @@ class FileSystem {
 
 	#if ( kha_html5 && js)
 	static var db:Database;
+	public static var dbKeys:Map<String,Bool> = new Map<String,Bool>();
 	static var wasm:kha.WasmFs;
 	static function includeJs(path:String,done:Void->Void){
 		var js:js.html.ScriptElement = cast(document.createElement("script"));
@@ -92,13 +93,19 @@ class FileSystem {
 				};
 				var open = function(p_db){
 					db = p_db.backendDB();
+					#if debug
 					trace("Opened DB with name: "+db.name);
-					untyped __js__('tdb.tables.forEach(function (table) {
-						console.log ("Found table: " + table.name);
-						console.log ("Table Schema: " +
-							JSON.stringify(table.schema, null, 1));
-					});');
-					done();
+					#end
+					var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+					var store = transaction.objectStore("projects");
+					var req = store.getAllKeys();
+					req.onsuccess = function (e){
+						var data:Array<String> = req.result;
+						for(name in data ){
+							dbKeys.set(name,true);
+						}
+						done();
+					}
 				};
 				untyped __js__('tdb.open().then({0}).catch({1})',open,create);
 			});
@@ -192,13 +199,7 @@ class FileSystem {
 		#elseif (kha_kore || sys)
 		return sys.FileSystem.exists(path);
 		#elseif (kha_webgl || js)
-		var inDB = false;
-		if(db != null){
-			var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
-			var store = transaction.objectStore("projects");
-			inDB = store.indexNames.contains(path);
-		}
-		return wasm.fs.existsSync(path) || inDB;
+		return wasm.fs.existsSync(path) || (db != null &&dbKeys.exists(path));
 		#else
 		return false;
 		#end
@@ -294,7 +295,7 @@ class FileSystem {
 		if(onDone!= null)
 			onDone();
 		#elseif (kha_webgl || js)
-		try  wasm.fs.mkdir(path,null,function(err){
+		try  wasm.fs.mkdir(path,{recursive:true},function(err){
 			if(err!=null) throw err;
 			else if(onDone!= null)
 				onDone();
@@ -313,16 +314,35 @@ class FileSystem {
 			data = kha.Blob.fromBytes(sys.io.File.getBytes(path));
 			onDone(data);
 			#elseif (kha_webgl || js)
-			wasm.fs.readFile(path,null,function (err,p_data){
-				if(err!=null){
-					if(onError != null)
-						onError({url: path,error: err});
-					else 
-						throw err;
-					return;
-				}
-				onDone(kha.Blob.fromBytes(p_data));
-			});
+			if(wasm.fs.existsSync(path)){
+				wasm.fs.readFile(path,null,function (err,p_data){
+					if(err!=null){
+						if(onError != null)
+							onError({url: path,error: err});
+						else 
+							throw err;
+						return;
+					}
+					onDone(kha.Blob.fromBytes(p_data));
+				});
+			} else{
+				// No need to check if db null, checked in exists();
+				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+				var store = transaction.objectStore("projects");
+				var req = store.get(path);
+				req.onsuccess =function(event){
+					var bytes:haxe.io.Bytes = haxe.io.Bytes.ofData(req.result.b);
+					var p:Dynamic = path.split('/');
+					p.pop();
+					p = p.join('/');
+					if(!FileSystem.exists(p))FileSystem.createDirectory(p);
+					FileSystem.saveToFile(path,bytes);
+					onDone(kha.Blob.fromBytes(bytes));
+				};
+				req.onerror = function(event){
+					trace('Error file at $path was not found');
+				};
+			}
 			#else
 			throw "Target platform doesn't support saving data to files";
 			#end
@@ -351,8 +371,13 @@ class FileSystem {
 				var store = transaction.objectStore("projects");
 				var req = store.get(path);
 				req.onsuccess =function(event){
-					FileSystem.saveToFile(path,event.target.result);
-					onDone(event.target.result.toString());
+					var bytes:haxe.io.Bytes = haxe.io.Bytes.ofData(req.result.b);
+					var p:Dynamic = path.split('/');
+					p.pop();
+					p = p.join('/');
+					if(!FileSystem.exists(p))FileSystem.createDirectory(p);
+					FileSystem.saveToFile(path,bytes);
+					onDone(bytes.toString());
 				};
 				req.onerror = function(event){
 					trace('Error file at $path was not found');
@@ -392,12 +417,16 @@ class FileSystem {
 				store.put(data,path);
 				var req = store.get(path);
 				req.onsuccess =function(event){
+					#if debug
 					trace('succeeded in writing $path');
+					#end
 					if(onDone!= null)
 						onDone();
 				};
 				req.onerror = function(event){
+					#if debug
 					trace('Was unable to create $path, maybe not enough space is available');
+					#end
 					if(onDone!= null)
 						onDone();
 				};
