@@ -204,8 +204,8 @@ class FileSystem {
 		return false;
 		#end
 	}
-	//@TODO: rename to readDirectory like the haxe FileSystem
-    static public function getFiles(path:String, folderOnly =false){
+	
+    static public function readDirectory(path:String, folderOnly =false){
 
         #if kha_krom
 
@@ -397,6 +397,90 @@ class FileSystem {
 		return wasm.fs.statSync(path);
 		#end
 	}
+	/**
+	 * Deletes the directory specified by path. If recursive is false, only empty directories can be deleted.
+	 * If path does not denote a valid directory, an exception is thrown in debug mode. 
+	 * @param path the path to the folder to remove.
+	 * @param recursive if we should recursively remove files and folders. Defaults to false.
+	 * @param done if specified, we will use async functions in supported platforms.
+	 */
+	public static function deleteDirectory(path:String,recursive:Bool = false,done:Void->Void = null) {
+		if(!recursive){
+			#if (kha_kore || sys)
+			sys.FileSystem.deleteDirectory(path);
+			if(done != null)
+				done();
+			#else 
+			if(done != null){
+				wasm.fs.rmdir(path,null,function(e){
+					#if debug
+					if(e!= null)throw e;
+					#end
+					done();
+				});
+			}
+			else {
+				wasm.fs.rmdirSync(path);
+			}
+			#end
+		}
+		else {
+			var async = done != null ? function(){}: null;
+			for(p in FileSystem.readDirectory(path)){
+				var pa = '$path/$p';
+				if(FileSystem.isDirectory(pa)){
+					FileSystem.deleteDirectory(pa,true,async);
+				}
+				else {
+					FileSystem.deleteFile(pa,async);
+				}
+			}
+			FileSystem.deleteDirectory(path,false,done);
+		}
+	}
+	/**
+	 * Deletes the file specified by path. If a function is given we call the async method in supported platforms.
+	 * If path does not denote a valid file we continue in release mode or we throw in debug mode.
+	 * @param path a String representing the path to the file.
+	 * @param done the function to be called when the async call is done. 
+	 */
+	public static function deleteFile(path:String,done:Void->Void = null) {
+		#if (kha_kore || sys)
+		sys.FileSystem.deleteFile(path);
+		if(done != null)
+			done();
+		#else 
+		var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+		var store = transaction.objectStore("projects");
+		if(done != null){
+			wasm.fs.unlink(path,null,function(e){
+				#if debug
+				if(e!= null)throw e;
+				#end
+				var req = store.delete(path);
+				req.onsuccess =function(event){
+					trace('Successfully deleted file $path from DB');
+					done();
+				};
+				req.onerror = function(event){
+					#if debug throw #else trace(#end'Error file at $path was not found'#if debug #else )#end;
+					done();
+				};
+				
+			});
+		}
+		else{
+			wasm.fs.unlinkSync(path);
+			var req = store.delete(path);
+			req.onsuccess =function(event){
+				trace('Successfully deleted file $path');
+			};
+			req.onerror = function(event){
+				trace('Error file at $path was not found');
+			};
+		}
+		#end
+	}
 
 	#end// !macro
 	public static function saveToFile(path:String,data:haxe.io.Bytes,onDone:Void->Void = null){
@@ -414,21 +498,36 @@ class FileSystem {
 			if(db != null){
 				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
 				var store = transaction.objectStore("projects");
-				store.put(data,path);
-				var req = store.get(path);
-				req.onsuccess =function(event){
-					#if debug
-					trace('succeeded in writing $path');
-					#end
-					if(onDone!= null)
-						onDone();
-				};
-				req.onerror = function(event){
+
+				var error = function(event){
 					#if debug
 					trace('Was unable to create $path, maybe not enough space is available');
 					#end
 					if(onDone!= null)
 						onDone();
+				};
+				var sucess = function(event){
+					#if debug
+					trace('succeeded in writing $path');
+					#end
+					dbKeys.set(path,true);
+					if(onDone!= null)
+						onDone();
+				};
+
+				var req = store.get(path);
+				req.onsuccess =function(event){
+					var r = store.delete(path);
+					r.onsuccess = function(event){
+						var nreq = store.put(data,path);
+						nreq.onsuccess = sucess;
+						nreq.onerror = error;
+					};
+				};
+				req.onerror = function(event){
+					var nreq = store.put(data,path);
+					nreq.onsuccess = sucess;
+					nreq.onerror = error;
 				};
 			}else{
 				if(onDone!= null)
