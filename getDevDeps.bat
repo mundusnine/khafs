@@ -1,3 +1,5 @@
+scoop install coreutils
+scoop install wget
 set version="0.6.0"
 wget -m -A * -pk -e robots=off https://unpkg.com/browse/@wasmer/wasmfs@%version%/lib/
 mv unpkg.com/@wasmer/wasmfs@%version%/lib/node_modules ./Assets/node_modules
