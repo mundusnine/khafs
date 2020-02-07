@@ -78,17 +78,29 @@ class FileSystem {
 				untyped __js__('{0} = new Dexie("projects")',tdb);
 				var create = function(e){
 					tdb.version(1).stores({projects:''});
-					db = tdb.backendDB();
-					tryPersistWithoutPromtingUser(function (result:String){
-						switch(result){
-							case "never":
-								trace("Not possible to persist storage");
-							case "persisted":
-								trace("Successfully persisted storage silently");
-							case "prompt":
-								trace("Not persisted, but we may prompt user when we want to.");
+					var out = function(){
+						if(tdb.isOpen()){
+							db = tdb.backendDB();
+							tryPersistWithoutPromtingUser(function (result:String){
+								switch(result){
+									case "never":
+										trace("Not possible to persist storage");
+									case "persisted":
+										trace("Successfully persisted storage silently");
+									case "prompt":
+										trace("Not persisted, but we may prompt user when we want to.");
+								}
+								done();
+							});
 						}
-						done();
+						else{
+							trace("IndexedDB been closed: "+tdb.hasBeenClosed());
+							trace("IndexedDB has failed to open: "+tdb.hasFailed());
+						}
+						
+					};
+					untyped __js__('tdb.open().then({0}).catch({1})',out,function(e){
+						trace(e.name);
 					});
 				};
 				var open = function(p_db){
