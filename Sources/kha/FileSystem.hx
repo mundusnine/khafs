@@ -130,15 +130,8 @@ class FileSystem {
 	
 	static public function fixPath(path:String){
 		#if (kha_webgl || js)
-		var systemId = "None";
-		var userAgent = untyped navigator.userAgent.toLowerCase();
-		if (userAgent.indexOf(' electron/') > -1) {
-			var pp = untyped window.process.platform;
-			systemId = pp == "win32" ? "Windows" : (pp == "darwin" ? "OSX" : "Linux");
-		} 
-		else{ // We are in the browser or wasi ergo posix env
-			systemId = "Linux";
-		}
+		// We are in the browser or electron ergo posix env
+		var systemId = "Linux";
 		#else
 		var systemId = kha.System.systemId;
 		#end
