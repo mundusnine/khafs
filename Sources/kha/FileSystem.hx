@@ -521,6 +521,7 @@ class FileSystem {
 				};
 
 				var req = store.get(path);
+				//If already exists
 				req.onsuccess =function(event){
 					var r = store.delete(path);
 					r.onsuccess = function(event){
