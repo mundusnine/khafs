@@ -7,6 +7,7 @@ import js.html.idb.Transaction;
 import js.html.idb.TransactionMode;
 import js.html.StorageType;
 import js.html.PermissionState;
+import js.html.InputElement;
 import js.html.CanvasElement;
 import js.Browser.navigator;
 import js.Browser.document;
@@ -31,6 +32,15 @@ class FileSystem {
 		js.src = path;
 		js.onload = done;
 		document.body.appendChild(js);
+	}
+	static function addInputElement(){
+		//Base it on this: https://developer.mozilla.org/en-US/docs/Web/API/File/Using_files_from_web_applications
+		var input:InputElement = cast(document.createElement("script"));
+		input.type = "file";
+		input.id="fileElem";
+		input.multiple = true;
+		input.style = "display:none";
+		document.body.appendChild(input);
 	}
 	static function tryPersistWithoutPromtingUser(done:String->Void){
 		if (navigator.storage == null || navigator.storage.persisted == null) {
@@ -71,6 +81,7 @@ class FileSystem {
 	#end
 	public static function init(done:Void->Void){
 		#if ( kha_html5 && js)
+		addInputElement();
 		includeJs('./wasmfs.js',function(){
 			wasm = new WasmFs();
 			includeJs('./dexie.js',function(){
