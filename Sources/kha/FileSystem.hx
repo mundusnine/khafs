@@ -33,14 +33,45 @@ class FileSystem {
 		js.onload = done;
 		document.body.appendChild(js);
 	}
+	/**
+	 * [BROWSER]
+	 * 
+	 * Call input.click() from your button event to open browser OS file input. 
+	 */
+	public static var input:InputElement;
 	static function addInputElement(){
 		//Base it on this: https://developer.mozilla.org/en-US/docs/Web/API/File/Using_files_from_web_applications
-		var input:InputElement = cast(document.createElement("script"));
+		input = document.createInputElement();
 		input.type = "file";
 		input.id="fileElem";
 		input.multiple = true;
-		input.style = "display:none";
+		input.style.display = "none";
+		input.onchange = onAddFiles; 
 		document.body.appendChild(input);
+	}
+	static var reader:js.html.FileReader = new js.html.FileReader();
+	static function next(index:Int){
+		var file = input.files[index];
+		trace("Filename: "+file.name);
+		reader.onload = function(){
+			var data = haxe.io.Bytes.ofString(reader.result);
+			trace(curDir+sep+file.name);
+			trace(data);
+			if(index+1 < input.files.length){
+				next(index+1);
+			}
+			// saveToFile();
+		}
+		reader.readAsBinaryString(file);
+		
+	}
+	static function onAddFiles() {
+		if(input != null){
+			trace("num in's: "+input.files.length);
+			if(0 < input.files.length){
+				next(0);
+			}
+		}
 	}
 	static function tryPersistWithoutPromtingUser(done:String->Void){
 		if (navigator.storage == null || navigator.storage.persisted == null) {
