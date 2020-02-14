@@ -52,18 +52,19 @@ class FileSystem {
 	static var reader:js.html.FileReader = new js.html.FileReader();
 	static function next(index:Int){
 		var file = input.files[index];
-		trace("Filename: "+file.name);
 		reader.onload = function(){
-			var data = haxe.io.Bytes.ofString(reader.result);
-			trace(curDir+sep+file.name);
-			trace(data);
-			if(index+1 < input.files.length){
-				next(index+1);
-			}
-			// saveToFile();
+			var url = reader.result.split('base64,')[1];
+			var data:haxe.io.Bytes = haxe.crypto.Base64.decode(url);
+			var path = curDir+sep+file.name;
+			
+			saveContent(path,url,function(){
+				if(index+1 < input.files.length){
+					next(index+1);
+				}
+			});
+			
 		}
-		reader.readAsBinaryString(file);
-		
+		reader.readAsDataURL(file);
 	}
 	static function onAddFiles() {
 		if(input != null){
@@ -351,92 +352,7 @@ class FileSystem {
 		throw "Target platform doesn't support creating a directory";
 		#end
 	}
-	public static function getBytes(path:String,onDone:kha.Blob->Void,onError:kha.AssetError->Void =null) {
-		if(FileSystem.exists(path)){
-			var data:kha.Blob;
-			#if kha_krom
-			var buffer = Krom.loadBlob(path);
-			onDone(buffer);// @:Incomplete we need to test this
-			#elseif (kha_kore || sys)
-			data = kha.Blob.fromBytes(sys.io.File.getBytes(path));
-			onDone(data);
-			#elseif (kha_webgl || js)
-			if(wasm.fs.existsSync(path)){
-				wasm.fs.readFile(path,null,function (err,p_data){
-					if(err!=null){
-						if(onError != null)
-							onError({url: path,error: err});
-						else 
-							throw err;
-						return;
-					}
-					onDone(kha.Blob.fromBytes(p_data));
-				});
-			} else{
-				// No need to check if db null, checked in exists();
-				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
-				var store = transaction.objectStore("projects");
-				var req = store.get(path);
-				req.onsuccess =function(event){
-					var bytes:haxe.io.Bytes = haxe.io.Bytes.ofData(req.result.b);
-					var p:Dynamic = path.split('/');
-					p.pop();
-					p = p.join('/');
-					if(!FileSystem.exists(p))FileSystem.createDirectory(p);
-					FileSystem.saveToFile(path,bytes);
-					onDone(kha.Blob.fromBytes(bytes));
-				};
-				req.onerror = function(event){
-					trace('Error file at $path was not found');
-				};
-			}
-			#else
-			throw "Target platform doesn't support saving data to files";
-			#end
-			
-		}
-	}
-	public static function getContent(path:String,onDone:String->Void):Void{
-		if(FileSystem.exists(path)){
-			var data = "";
-			#if kha_krom
-			var buffer = Krom.loadBlob(path);
-			onDone(buffer.toString());// @:Incomplete we need to test this
-			#elseif (kha_kore || sys)
-			data = sys.io.File.getContent(path);
-			onDone(data);
-			#elseif (kha_webgl || js)
-			if(wasm.fs.existsSync(path)){
-				wasm.fs.readFile(path,{encoding:'utf8'},function (err,data){
-					if(err!=null) throw err;
-					onDone(data);
-				});
-			}
-			else{
-				// No need to check if db null, checked in exists();
-				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
-				var store = transaction.objectStore("projects");
-				var req = store.get(path);
-				req.onsuccess =function(event){
-					var bytes:haxe.io.Bytes = haxe.io.Bytes.ofData(req.result.b);
-					var p:Dynamic = path.split('/');
-					p.pop();
-					p = p.join('/');
-					if(!FileSystem.exists(p))FileSystem.createDirectory(p);
-					FileSystem.saveToFile(path,bytes);
-					onDone(bytes.toString());
-				};
-				req.onerror = function(event){
-					trace('Error file at $path was not found');
-				};
-			}
-			
-			#else
-			throw "Target platform doesn't support saving data to files";
-			#end
-			
-		}
-	}
+	
 	public static function stat(path:String){
 		#if (kha_kore || sys)
 		return sys.FileSystem.stat(path);
@@ -529,17 +445,118 @@ class FileSystem {
 		#end
 	}
 
+	public static function getBytes(path:String,onDone:kha.Blob->Void,onError:kha.AssetError->Void =null) {
+		if(FileSystem.exists(path)){
+			var data:kha.Blob;
+			#if kha_krom
+			var buffer = Krom.loadBlob(path);
+			onDone(buffer);// @:Incomplete we need to test this
+			#elseif (kha_kore || sys)
+			data = kha.Blob.fromBytes(sys.io.File.getBytes(path));
+			onDone(data);
+			#elseif (kha_webgl || js)
+			if(wasm.fs.existsSync(path)){
+				wasm.fs.readFile(path,null,function (err,p_data){
+					if(err!=null){
+						if(onError != null)
+							onError({url: path,error: err});
+						else 
+							throw err;
+						return;
+					}
+					var bytes = haxe.crypto.Base64.decode(haxe.io.Bytes.ofData(p_data).toString());
+					onDone(kha.Blob.fromBytes(bytes));
+				});
+			} else{
+				// No need to check if db null, checked in exists();
+				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+				var store = transaction.objectStore("projects");
+				var req = store.get(path);
+				req.onsuccess =function(event){
+					var bytes:haxe.io.Bytes = haxe.io.Bytes.ofData(req.result.b);
+					var p:Dynamic = path.split('/');
+					p.pop();
+					p = p.join('/');
+					if(!FileSystem.exists(p))FileSystem.createDirectory(p);
+					FileSystem.saveBytes(path,bytes);
+					onDone(kha.Blob.fromBytes(bytes));
+				};
+				req.onerror = function(event){
+					trace('Error file at $path was not found');
+				};
+			}
+			#else
+			throw "Target platform doesn't support saving data to files";
+			#end
+			
+		}
+	}
+	public static function getContent(path:String,onDone:String->Void):Void{
+		if(FileSystem.exists(path)){
+			var data = "";
+			#if kha_krom
+			var buffer = Krom.loadBlob(path);
+			onDone(buffer.toString());// @:Incomplete we need to test this
+			#elseif (kha_kore || sys)
+			data = sys.io.File.getContent(path);
+			onDone(data);
+			#elseif (kha_webgl || js)
+			if(wasm.fs.existsSync(path)){
+				wasm.fs.readFile(path,{encoding:'utf8'},function (err,data){
+					if(err!=null) throw err;
+					onDone(data);
+				});
+			}
+			else{
+				// No need to check if db null, checked in exists();
+				var transaction:Transaction = db.transaction(["projects"],TransactionMode.READWRITE);
+				var store = transaction.objectStore("projects");
+				var req = store.get(path);
+				req.onsuccess =function(event){
+					var bytes:haxe.io.Bytes = haxe.io.Bytes.ofData(req.result.b);
+					var p:Dynamic = path.split('/');
+					p.pop();
+					p = p.join('/');
+					if(!FileSystem.exists(p))FileSystem.createDirectory(p);
+					FileSystem.saveBytes(path,bytes);
+					onDone(bytes.toString());
+				};
+				req.onerror = function(event){
+					trace('Error file at $path was not found');
+				};
+			}
+			
+			#else
+			throw "Target platform doesn't support saving data to files";
+			#end
+			
+		}
+	}
 	#end// !macro
-	public static function saveToFile(path:String,data:haxe.io.Bytes,onDone:Void->Void = null){
+	public static function saveBytes(path:String,data:haxe.io.Bytes,onDone:Void->Void = null){
+		saveToFile(path,data,null,onDone);
+	}
+	public static function saveContent(path:String,data:String,onDone:Void->Void = null){
+		saveToFile(path,null,data,onDone);
+	}
+	static function saveToFile(path:String,bytes:haxe.io.Bytes=null,content:String=null,onDone:Void->Void = null){
 		#if kha_krom
 		Krom.fileSaveBytes(path,data.getData());
 		if(onDone!= null)
 			onDone();
 		#elseif (kha_kore || sys)
-		sys.io.File.saveBytes(path,data);
+		if(bytes != null)
+			sys.io.File.saveBytes(path,bytes);
+		else if(content != null)
+			sys.io.File.saveContent(path,content);
 		if(onDone!= null)
 			onDone();
 		#elseif (kha_webgl || js)
+		var data:Any;
+		if(bytes!= null)
+			data = bytes;
+		else 
+			data = content;
 		wasm.fs.writeFile(path,data,null,function (err){
 			if(err!=null) throw err;
 			if(db != null){
