@@ -513,7 +513,13 @@ class FileSystem {
 				var store = transaction.objectStore("projects");
 				var req = store.get(path);
 				req.onsuccess =function(event){
-					var bytes:haxe.io.Bytes = haxe.io.Bytes.ofData(req.result.b);
+					var bytes:haxe.io.Bytes;
+					if(Std.is(req.result, String)){
+						bytes = haxe.io.Bytes.ofString(req.result);
+					}
+					else{
+						bytes = haxe.io.Bytes.ofData(req.result.b);
+					} 
 					var p:Dynamic = path.split('/');
 					p.pop();
 					p = p.join('/');
