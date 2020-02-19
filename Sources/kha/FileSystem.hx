@@ -441,6 +441,19 @@ class FileSystem {
 		#end
 	}
 
+	#if wasmfs
+	public static function getData(path:String, onDone:kha.Blob->Void, onError:kha.AssetError->Void = null) {
+		if (StringTools.endsWith(path, '.json')) {
+			getContent(path, function(data:String) {
+				var bytes = haxe.io.Bytes.ofString(data);
+				onDone(kha.Blob.fromBytes(bytes));
+			});
+		} else {
+			getBytes(path, onDone, onError);
+		}
+	}
+	#end
+
 	public static function getBytes(path:String, onDone:kha.Blob->Void, onError:kha.AssetError->Void = null) {
 		if (FileSystem.exists(path)) {
 			var data:kha.Blob;
