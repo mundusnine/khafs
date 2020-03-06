@@ -392,6 +392,9 @@ class FileSystem {
 					FileSystem.deleteDirectory(pa, true, async);
 				} else {
 					FileSystem.deleteFile(pa, async);
+					#if wasmfs
+					kha.FileSystem.dbKeys.remove(pa);
+					#end
 				}
 			}
 			FileSystem.deleteDirectory(path, false, done);
