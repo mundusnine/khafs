@@ -1,6 +1,7 @@
-package sys.io;
 #if (wasmfs && js)
-import sys.FileSystem
+package sys.io;
+
+import sys.FileSystem;
 
 class File{
     /**
@@ -9,7 +10,7 @@ class File{
      * @param onDone this function is async so the data can be set by this function when the fetch is done
      */
     public static function getContent(path:String,onDone:String->Void):Void{
-        FileSystem.getContent(path,onDone);
+        khafs.Fs.getContent(path,onDone);
     }
 }
 #end

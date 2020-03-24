@@ -1,4 +1,4 @@
-package kha;
+package khafs;
 
 @:native('WasmFs.WasmFs')
 extern class WasmFs {

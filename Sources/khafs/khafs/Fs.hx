@@ -1,4 +1,4 @@
-package kha;
+package khafs;
 
 #if (kha_html5 && js)
 import js.html.idb.Database;
@@ -15,7 +15,7 @@ import js.Browser.window;
 import js.Syntax;
 #end
 
-class FileSystem {
+class Fs {
 	#if !macro
 	public static var dataPath = "";
 	public static var curDir:String = "";
@@ -25,7 +25,7 @@ class FileSystem {
 	#if (kha_html5 && js)
 	static var db:Database;
 	public static var dbKeys:Map<String, Bool> = new Map<String, Bool>();
-	static var wasm:kha.WasmFs;
+	static var wasm:khafs.WasmFs;
 
 	static function includeJs(path:String, done:Void->Void) {
 		var js:js.html.ScriptElement = cast(document.createElement("script"));
@@ -315,7 +315,7 @@ class FileSystem {
 		#elseif (kha_kore || sys)
 		return sys.FileSystem.isDirectory(path);
 		#elseif (kha_webgl || js)
-		return try FileSystem.stat(path).isDirectory() catch (e:Dynamic) false;
+		return try Fs.stat(path).isDirectory() catch (e:Dynamic) false;
 		#else
 		return false;
 		#end
@@ -386,18 +386,18 @@ class FileSystem {
 			#end
 		} else {
 			var async = done != null ? function() {} : null;
-			for (p in FileSystem.readDirectory(path)) {
+			for (p in Fs.readDirectory(path)) {
 				var pa = '$path/$p';
-				if (FileSystem.isDirectory(pa)) {
-					FileSystem.deleteDirectory(pa, true, async);
+				if (Fs.isDirectory(pa)) {
+					Fs.deleteDirectory(pa, true, async);
 				} else {
-					FileSystem.deleteFile(pa, async);
-					#if wasmfs
-					kha.FileSystem.dbKeys.remove(pa);
+					Fs.deleteFile(pa, async);
+					#if (wasmfs && js)
+					khafs.Fs.dbKeys.remove(pa);
 					#end
 				}
 			}
-			FileSystem.deleteDirectory(path, false, done);
+			Fs.deleteDirectory(path, false, done);
 		}
 	}
 
@@ -458,7 +458,7 @@ class FileSystem {
 	#end
 
 	public static function getBytes(path:String, onDone:kha.Blob->Void, onError:kha.AssetError->Void = null) {
-		if (FileSystem.exists(path)) {
+		if (Fs.exists(path)) {
 			var data:kha.Blob;
 			#if kha_krom
 			var buffer = Krom.loadBlob(path);
@@ -489,9 +489,9 @@ class FileSystem {
 					var p:Dynamic = path.split('/');
 					p.pop();
 					p = p.join('/');
-					if (!FileSystem.exists(p))
-						FileSystem.createDirectory(p);
-					FileSystem.saveBytes(path, bytes);
+					if (!Fs.exists(p))
+						Fs.createDirectory(p);
+					Fs.saveBytes(path, bytes);
 					onDone(kha.Blob.fromBytes(bytes));
 				};
 				req.onerror = function(event) {
@@ -505,7 +505,7 @@ class FileSystem {
 	}
 
 	public static function getContent(path:String, onDone:String->Void):Void {
-		if (FileSystem.exists(path)) {
+		if (Fs.exists(path)) {
 			var data = "";
 			#if kha_krom
 			var buffer = Krom.loadBlob(path);
@@ -535,9 +535,9 @@ class FileSystem {
 					var p:Dynamic = path.split('/');
 					p.pop();
 					p = p.join('/');
-					if (!FileSystem.exists(p))
-						FileSystem.createDirectory(p);
-					FileSystem.saveBytes(path, bytes);
+					if (!Fs.exists(p))
+						Fs.createDirectory(p);
+					Fs.saveBytes(path, bytes);
 					onDone(bytes.toString());
 				};
 				req.onerror = function(event) {
