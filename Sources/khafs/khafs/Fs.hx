@@ -291,6 +291,9 @@ class Fs {
 		var files:Array<String> = [];
 		#end
 		curDir = path;
+		files = files.filter(function(e:String){
+			return e != "stderr" && e != "stdin" && e != "stdout";
+		});
 		if (folderOnly) {
 			files = files.filter(function(e:String) {
 				return isDirectory(path + sep + e);
@@ -315,6 +318,7 @@ class Fs {
 		#elseif (kha_kore || sys)
 		return sys.FileSystem.isDirectory(path);
 		#elseif (kha_webgl || js)
+		if(path =="")return false;
 		return try Fs.stat(path).isDirectory() catch (e:Dynamic) false;
 		#else
 		return false;
@@ -502,6 +506,9 @@ class Fs {
 			throw "Target platform doesn't support saving data to files";
 			#end
 		}
+		else{
+			throw "File Not Found";
+		}
 	}
 
 	public static function getContent(path:String, onDone:String->Void):Void {
@@ -547,6 +554,9 @@ class Fs {
 			#else
 			throw "Target platform doesn't support saving data to files";
 			#end
+		}
+		else{
+			throw "File Not Found";
 		}
 	}
 	#end // !macro
