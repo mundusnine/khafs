@@ -450,7 +450,7 @@ class Fs {
 
 	#if wasmfs
 	public static function getData(path:String, onDone:kha.Blob->Void, onError:kha.AssetError->Void = null) {
-		if (StringTools.endsWith(path, '.json')) {
+		if (StringTools.endsWith(path, '.json') || StringTools.endsWith(path, '.vhx')) {
 			getContent(path, function(data:String) {
 				var bytes = haxe.io.Bytes.ofString(data);
 				onDone(kha.Blob.fromBytes(bytes));
