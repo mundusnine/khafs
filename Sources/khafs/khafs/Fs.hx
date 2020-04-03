@@ -290,7 +290,7 @@ class Fs {
 		#else
 		var files:Array<String> = [];
 		#end
-		curDir = path;
+		// curDir = path; @TODO: Verify if not updating curDir on diretcory breaks stuff... (it broke input curDir when used in foundry).
 		files = files.filter(function(e:String){
 			return e != "stderr" && e != "stdin" && e != "stdout";
 		});

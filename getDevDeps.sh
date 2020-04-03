@@ -1,5 +1,5 @@
 #!/bin/bash
-version="0.6.0"
+version="0.10.2"
 wget -m -A * -pk -e robots=off https://unpkg.com/browse/@wasmer/wasmfs@$version/lib/
 mv unpkg.com/@wasmer/wasmfs@$version/lib/node_modules ./Assets/node_modules
 mv unpkg.com/@wasmer/wasmfs@$version/lib/packages ./Assets/packages
