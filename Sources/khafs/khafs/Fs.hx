@@ -556,7 +556,7 @@ class Fs {
 			#end
 		}
 		else{
-			throw "File Not Found";
+			throw('File Not Found at path: $path');
 		}
 	}
 	#end // !macro
