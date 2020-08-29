@@ -1,5 +1,6 @@
 package khafs;
 
+import haxe.io.BytesOutput;
 #if (kha_html5 && js)
 import js.html.idb.Database;
 import js.html.idb.OpenDBRequest;
@@ -13,6 +14,9 @@ import js.Browser.navigator;
 import js.Browser.document;
 import js.Browser.window;
 import js.Syntax;
+import khafs.WasmFs.Stats;
+#else
+import sys.FileStat as Stats;
 #end
 
 class Fs {
@@ -79,6 +83,64 @@ class Fs {
 			}
 		}
 	}
+	/**
+	 * Downloads the file to the users computer based on it's extension. If the path points to a folder, a zip of the folder and it's recursive contents are downloaded.
+	 * @param path
+	 * The path to the file/folder to be downloaded
+	 */
+	public static function download(path:String){
+		var t = path.split("/");
+		var filename = t[t.length-1].split('.').length == 1 ? t[t.length-1] +".zip": t[t.length-1];
+		var str = filename.split('.');
+		var filetype =	getFileType(str[str.length-1]);
+		var onDownload = function(bytes:haxe.io.Bytes) {
+				var blob = new js.html.Blob([bytes.getData()], {type: filetype});
+				var link = document.createAnchorElement();
+				link.href = js.html.URL.createObjectURL(blob);
+				link.download = filename;
+				link.click();
+		}
+
+		if(StringTools.endsWith(filename,".zip") && isDirectory(path)){
+
+			// create the output file 
+			var out = new BytesOutput();
+			// write the zip file
+			var zip = new haxe.zip.Writer(out);
+			getEntries(path,function(entries:List<haxe.zip.Entry>){
+				zip.write(entries);
+				onDownload(out.getBytes());
+			});
+		}
+		else{
+			
+			getData(path,function(b:kha.Blob) {
+				onDownload(b.bytes);
+			});
+		}
+	}
+
+	//Formats based on: https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types/Common_types
+	static function getFileType(end:String){
+		var out = "";
+		switch(end){
+			case "zip":
+				out = "application/zip, application/octet-stream";
+			case "json" | "vhx" :
+				out = "data:text/json;charset=utf-8,";
+			case "txt" | "hx" | "hscript":
+				out = "text/plain";
+			case "jpeg" | "jpg" | "gif" | "png":
+				out = "image/"+end;
+			case "svg":
+				out = "image/svg+xml";
+			case "ogg" | "mp3" | "opus" | "wav" | "webm" | "midi":
+				out = "audio/"+end;
+			default:
+				out = "application/octet-stream";
+		}
+		return out;
+	}
 
 	static function tryPersistWithoutPromtingUser(done:String->Void) {
 		if (navigator.storage == null || navigator.storage.persisted == null) {
@@ -117,6 +179,44 @@ class Fs {
 		});
 	}
 	#end
+	static var callCount = 0;
+		// recursive read a directory, add the file entries to the list
+	static function getEntries(dir:String, onDone:List<haxe.zip.Entry>->Void,entries:List<haxe.zip.Entry>=null, inDir:Null<String> = null) {
+		if(entries== null) {
+			entries = new List<haxe.zip.Entry>();
+			callCount = 0;
+		}
+		if (inDir == null) inDir = dir;
+		for(file in readDirectory(dir)) {
+			callCount++;
+			var path = haxe.io.Path.join([dir, file]);
+			if (isDirectory(path)) {
+				getEntries(path, onDone,entries,inDir);
+				callCount--;
+			} else {
+				getData(path,function(b:kha.Blob){
+					var bytes:haxe.io.Bytes = b.bytes;
+					var entry:haxe.zip.Entry = {
+						fileName: StringTools.replace(path, inDir, ""), 
+						fileSize: bytes.length,
+						fileTime: Date.now(),
+						compressed: false,
+						dataSize: Std.int(stat(path).size),
+						data: bytes,
+						crc32: haxe.crypto.Crc32.make(bytes)
+					};
+					entries.push(entry);
+					callCount--;
+					if(callCount == 0){
+						onDone(entries);
+					}
+				},function(?onError:Null<kha.AssetError>) {
+					if(onError != null)
+						trace(onError.error);
+				});
+			}
+		}
+	}
 
 	public static function init(done:Void->Void) {
 		#if (kha_html5 && js)
@@ -125,7 +225,7 @@ class Fs {
 			wasm = new WasmFs();
 			includeJs('./dexie.js', function() {
 				var tdb:Dynamic = null;
-				untyped __js__('{0} = new Dexie("projects")', tdb);
+				Syntax.code('{0} = new Dexie("projects")', tdb);
 				var create = function(e) {
 					tdb.version(1).stores({projects: ''});
 					var out = function() {
@@ -147,7 +247,7 @@ class Fs {
 							trace("IndexedDB has failed to open: " + tdb.hasFailed());
 						}
 					};
-					untyped __js__('tdb.open().then({0}).catch({1})', out, function(e) {
+					Syntax.code('tdb.open().then({0}).catch({1})', out, function(e) {
 						trace(e.name);
 					});
 				};
@@ -167,7 +267,7 @@ class Fs {
 						done();
 					}
 				};
-				untyped __js__('tdb.open().then({0}).catch({1})', open, create);
+				Syntax.code('tdb.open().then({0}).catch({1})', open, create);
 			});
 		});
 		// done();
@@ -290,7 +390,7 @@ class Fs {
 		#else
 		var files:Array<String> = [];
 		#end
-		// curDir = path; @TODO: Verify if not updating curDir on diretcory breaks stuff... (it broke input curDir when used in foundry).
+		// curDir = path; @TODO: Verify if not updating curDir on directory breaks stuff... (it broke input curDir when used in foundry).
 		files = files.filter(function(e:String){
 			return e != "stderr" && e != "stdin" && e != "stdout";
 		});
@@ -354,7 +454,7 @@ class Fs {
 		#end
 	}
 
-	public static function stat(path:String) {
+	public static function stat(path:String):Stats {
 		#if (kha_kore || sys)
 		return sys.FileSystem.stat(path);
 		#else
@@ -450,7 +550,7 @@ class Fs {
 
 	#if wasmfs
 	public static function getData(path:String, onDone:kha.Blob->Void, onError:kha.AssetError->Void = null) {
-		if (StringTools.endsWith(path, '.json') || StringTools.endsWith(path, '.vhx')) {
+		if (StringTools.endsWith(path, '.json') || StringTools.endsWith(path, '.vhx') || StringTools.endsWith(path, '.hx')) {
 			getContent(path, function(data:String) {
 				var bytes = haxe.io.Bytes.ofString(data);
 				onDone(kha.Blob.fromBytes(bytes));
