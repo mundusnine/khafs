@@ -40,11 +40,14 @@ class Fs {
 	}
 
 	/**
-	 * [BROWSER]
-	 *
 	 * Call input.click() from your button event to open browser OS file input.
 	 */
 	public static var input:InputElement;
+	
+	/**
+	 * Function called when the input.click() is finsihed and it added all files to the FileSystem.
+	 */
+	public static dynamic function onInputDone(lastPath:String){}
 
 	static function addInputElement() {
 		// Base it on this: https://developer.mozilla.org/en-US/docs/Web/API/File/Using_files_from_web_applications
@@ -69,6 +72,9 @@ class Fs {
 			saveContent(path, url, function() {
 				if (index + 1 < input.files.length) {
 					next(index + 1);
+				}
+				if( index + 1 == input.files.length ){
+					onInputDone(path);
 				}
 			});
 		}
@@ -212,14 +218,15 @@ class Fs {
 					}
 				},function(?onError:Null<kha.AssetError>) {
 					if(onError != null)
-						trace(onError.error);
+						trace(onError.error+' at path: $path');
 				});
 			}
 		}
 	}
 
-	public static function init(done:Void->Void) {
+	public static function init(done:Void->Void,?ftExceptions:Array<String>) {
 		#if (kha_html5 && js)
+		filetypeExceptions = filetypeExceptions.concat(ftExceptions);
 		addInputElement();
 		includeJs('./wasmfs.js', function() {
 			wasm = new WasmFs();
@@ -418,7 +425,6 @@ class Fs {
 		#elseif (kha_kore || sys)
 		return sys.FileSystem.isDirectory(path);
 		#elseif (kha_webgl || js)
-		if(path =="")return false;
 		return try Fs.stat(path).isDirectory() catch (e:Dynamic) false;
 		#else
 		return false;
@@ -520,7 +526,7 @@ class Fs {
 		var transaction:Transaction = db.transaction(["projects"], TransactionMode.READWRITE);
 		var store = transaction.objectStore("projects");
 		if (done != null) {
-			wasm.fs.unlink(path, null, function(e) {
+			wasm.fs.unlink(path,function(e) {
 				#if debug
 				if (e != null)
 					throw e;
@@ -549,8 +555,16 @@ class Fs {
 	}
 
 	#if wasmfs
+	public static var filetypeExceptions:Array<String> = [".json",".hx"];
 	public static function getData(path:String, onDone:kha.Blob->Void, onError:kha.AssetError->Void = null) {
-		if (StringTools.endsWith(path, '.json') || StringTools.endsWith(path, '.vhx') || StringTools.endsWith(path, '.hx')) {
+		var exception = false;
+		for(filetype in filetypeExceptions){
+			if(StringTools.endsWith(path, filetype)){
+				exception = true;
+				break;
+			}
+		}
+		if (exception) {
 			getContent(path, function(data:String) {
 				var bytes = haxe.io.Bytes.ofString(data);
 				onDone(kha.Blob.fromBytes(bytes));
@@ -671,7 +685,7 @@ class Fs {
 
 	static function saveToFile(path:String, bytes:haxe.io.Bytes = null, content:String = null, onDone:Void->Void = null) {
 		#if kha_krom
-		Krom.fileSaveBytes(path, data.getData());
+		Krom.fileSaveBytes(path, bytes);
 		if (onDone != null)
 			onDone();
 		#elseif (kha_kore || sys)

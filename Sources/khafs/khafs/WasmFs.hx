@@ -3,8 +3,11 @@ package khafs;
 @:native('WasmFs.WasmFs')
 extern class WasmFs {
     public function new():Void;
-    public var fs:Dynamic;
-    public function existsSync(path:String):Bool;
+    public var fs:Wasmer;
+    
+}
+extern class Wasmer{
+	public function existsSync(path:String):Bool;
     public function unlinkSync(path:String):Void;
     public function unlink(path:String,callback:js.lib.Error->Void):Void;
     public function rmdirSync(path:String,?options:{maxRetries:Int,recursive:Bool,retryDelay:Int}):Void;
