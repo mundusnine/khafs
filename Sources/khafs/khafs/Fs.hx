@@ -1,5 +1,7 @@
 package khafs;
 
+import kha.Blob;
+import haxe.io.Bytes;
 import kha.Assets;
 import haxe.io.BytesOutput;
 #if (kha_html5 && js)
@@ -719,7 +721,7 @@ class Fs {
 			data = bytes.toString();
 		else
 			data = content;
-		html5WriteFile(path,data);
+		html5WriteFile(path,data,onDone);
 		#elseif (kha_webgl || js)
 		var data:Any;
 		if (bytes != null)
@@ -775,11 +777,14 @@ class Fs {
 	}
 	#if kha_debug_html5
 	static var toReplace:Array<String> = ['_vhx','_json','_prj'];
-	static function html5WriteFile(filePath: String, data: String) {
+	static function html5WriteFile(filePath: String, data: String,onDone:Void->Void = null) {
 		var fs = js.Syntax.code('require("fs");');
 		var path = js.Syntax.code('require("path")');
 		for(rep in toReplace){
 			if(StringTools.endsWith(filePath,rep)){
+				var blob = Assets.blobs.get(filePath);
+				blob.bytes = Bytes.ofString(data);
+				Reflect.setProperty(Assets.blobs,filePath,blob);
 				var other = StringTools.replace(rep,'_','.');
 				filePath = StringTools.replace(filePath,rep,other);
 				if(rep == "_vhx"){
@@ -790,7 +795,8 @@ class Fs {
 		}
 		var filePath = path.resolve(path.join(Syntax.code("global.__dirname"), '..', '..','/Assets/'),filePath);
 		trace(filePath);
-		try { fs.writeFileSync(filePath, data); }
+		onDone = onDone != null ? onDone : function(){};
+		try { fs.writeFile(filePath,data,onDone); }
 		catch (x: Dynamic) { trace('saving "${filePath}" failed'); }
 	}
 	#end
