@@ -1,5 +1,6 @@
 package khafs;
 
+import kha.Assets;
 import haxe.io.BytesOutput;
 #if (kha_html5 && js)
 import js.html.idb.Database;
@@ -357,6 +358,10 @@ class Fs {
 		return str == "true";
 		#elseif (kha_kore || sys)
 		return sys.FileSystem.exists(path);
+		#elseif kha_debug_html5
+		var one = Reflect.hasField(Assets.blobs,path) || Reflect.hasField(Assets.images,path);
+		var two = Reflect.hasField(Assets.fonts,path) || Reflect.hasField(Assets.videos,path);
+		return one || two || Reflect.hasField(Assets.sounds,path);
 		#elseif (kha_webgl || js)
 		return wasm.fs.existsSync(path) || (db != null && dbKeys.exists(path));
 		#else
@@ -584,6 +589,14 @@ class Fs {
 			#elseif (kha_kore || sys)
 			data = kha.Blob.fromBytes(sys.io.File.getBytes(path));
 			onDone(data);
+			#elseif kha_debug_html5
+			if(Reflect.hasField(Assets.blobs,path)){
+				var b = Assets.blobs.get(path);
+				onDone(b);
+			}
+			else{
+				trace('Error file at $path was not found');
+			}
 			#elseif (kha_webgl || js)
 			if (wasm.fs.existsSync(path)) {
 				wasm.fs.readFile(path, null, function(err, p_data) {
@@ -634,6 +647,11 @@ class Fs {
 			#elseif (kha_kore || sys)
 			data = sys.io.File.getContent(path);
 			onDone(data);
+			#elseif kha_debug_html5
+			if(Reflect.hasField(Assets.blobs,path)){
+				var b = Assets.blobs.get(path);
+				onDone(b.toString());
+			}
 			#elseif (kha_webgl || js)
 			if (wasm.fs.existsSync(path)) {
 				wasm.fs.readFile(path, {encoding: 'utf8'}, function(err, data) {
@@ -695,6 +713,13 @@ class Fs {
 			sys.io.File.saveContent(path, content);
 		if (onDone != null)
 			onDone();
+		#elseif kha_debug_html5
+		var data:Any;
+		if (bytes != null)
+			data = bytes.toString();
+		else
+			data = content;
+		html5WriteFile(path,data);
 		#elseif (kha_webgl || js)
 		var data:Any;
 		if (bytes != null)
@@ -748,4 +773,25 @@ class Fs {
 		throw "Target platform doesn't support saving data to files";
 		#end
 	}
+	#if kha_debug_html5
+	static var toReplace:Array<String> = ['_vhx','_json','_prj'];
+	static function html5WriteFile(filePath: String, data: String) {
+		var fs = js.Syntax.code('require("fs");');
+		var path = js.Syntax.code('require("path")');
+		for(rep in toReplace){
+			if(StringTools.endsWith(filePath,rep)){
+				var other = StringTools.replace(rep,'_','.');
+				filePath = StringTools.replace(filePath,rep,other);
+				if(rep == "_vhx"){
+					filePath = 'Scripts/$filePath';
+				}
+				break;
+			}
+		}
+		var filePath = path.resolve(path.join(Syntax.code("global.__dirname"), '..', '..','/Assets/'),filePath);
+		trace(filePath);
+		try { fs.writeFileSync(filePath, data); }
+		catch (x: Dynamic) { trace('saving "${filePath}" failed'); }
+	}
+	#end
 }
