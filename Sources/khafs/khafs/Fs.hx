@@ -782,8 +782,11 @@ class Fs {
 		var path = js.Syntax.code('require("path")');
 		for(rep in toReplace){
 			if(StringTools.endsWith(filePath,rep)){
-				var blob = Assets.blobs.get(filePath);
-				blob.bytes = Bytes.ofString(data);
+				var blob:kha.Blob = Assets.blobs.get(filePath);
+				if(blob != null)
+					blob.bytes = Bytes.ofString(data);
+				else
+					blob = kha.Blob.fromBytes(Bytes.ofString(data));
 				Reflect.setProperty(Assets.blobs,filePath,blob);
 				var other = StringTools.replace(rep,'_','.');
 				filePath = StringTools.replace(filePath,rep,other);
