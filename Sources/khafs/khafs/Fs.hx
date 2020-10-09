@@ -529,6 +529,26 @@ class Fs {
 		sys.FileSystem.deleteFile(path);
 		if (done != null)
 			done();
+		#elseif kha_debug_html5
+		var fs = js.Syntax.code('require("fs");');
+		var ppath = js.Syntax.code('require("path")');
+		var filePath = "";
+		for(rep in toReplace){
+			if(StringTools.endsWith(path,rep)){
+				Reflect.setProperty(Assets.blobs,path,null);
+				var other = StringTools.replace(rep,'_','.');
+				filePath = StringTools.replace(path,rep,other);
+				if(rep == "_vhx"){
+					filePath = 'Scripts/$filePath';
+				}
+				break;
+			}
+		}
+		var filePath = ppath.resolve(ppath.join(Syntax.code("global.__dirname"), '..', '..','/Assets/'),filePath);
+		trace(filePath);
+		done = done != null ? done : function(){};
+		try { fs.unlink(filePath,done); }
+		catch (x: Dynamic) { trace('saving "${filePath}" failed'); }
 		#else
 		var transaction:Transaction = db.transaction(["projects"], TransactionMode.READWRITE);
 		var store = transaction.objectStore("projects");
