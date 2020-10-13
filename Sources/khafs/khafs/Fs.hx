@@ -393,7 +393,24 @@ class Fs {
 		#elseif (kha_kore || sys)
 		path = fixPath(path);
 		var files = sys.FileSystem.isDirectory(path) ? sys.FileSystem.readDirectory(path) : [];
-		#elseif (kha_webgl || js)
+		#elseif kha_debug_html5
+		var files:Array<String> = [];
+		for(f in Assets.blobs.names){
+			files.push(f);
+		}
+		for(f in Assets.fonts.names){
+			files.push(f);
+		}
+		for(f in Assets.images.names){
+			files.push(f);
+		}
+		for(f in Assets.videos.names){
+			files.push(f);
+		}
+		for(f in Assets.sounds.names){
+			files.push(f);
+		}
+		#elseif (kha_html5 && !kha_debug_html5)
 		var files:Array<String> = [];
 		try {
 			path = fixPath(path);
