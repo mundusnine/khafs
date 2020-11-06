@@ -833,8 +833,14 @@ class Fs {
 				break;
 			}
 		}
-		var filePath = path.resolve(path.join(Syntax.code("global.__dirname"), '..', '..','/Assets/'),filePath);
+		var filePath:String = path.resolve(path.join(Syntax.code("global.__dirname"), '..', '..','/Assets/'),filePath);
 		trace(filePath);
+		var tdir = filePath.split('/');
+		tdir.pop();
+		var dir = tdir.join('/');
+		if(!fs.existsSync(dir)){
+			fs.mkdir(dir,null,function(){});
+		}
 		onDone = onDone != null ? onDone : function(){};
 		try { fs.writeFile(filePath,data,onDone); }
 		catch (x: Dynamic) { trace('saving "${filePath}" failed'); }
