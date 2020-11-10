@@ -834,10 +834,13 @@ class Fs {
 			}
 		}
 		var filePath:String = path.resolve(path.join(Syntax.code("global.__dirname"), '..', '..','/Assets/'),filePath);
-		trace(filePath);
-		var tdir = filePath.split('/');
+		var sep = Fs.sep;
+		var pp = untyped window.process.platform;
+		if(pp == "win32")
+			sep = "\\";
+		var tdir = filePath.split(sep);
 		tdir.pop();
-		var dir = tdir.join('/');
+		var dir = tdir.join(sep);
 		if(!fs.existsSync(dir)){
 			fs.mkdir(dir,null,function(){});
 		}
