@@ -86,7 +86,6 @@ class Fs {
 
 	static function onAddFiles() {
 		if (input != null) {
-			trace("num in's: " + input.files.length);
 			if (0 < input.files.length) {
 				next(0);
 			}
@@ -581,7 +580,7 @@ class Fs {
 					done();
 				};
 				req.onerror = function(event) {
-					#if debug throw #else trace(#end 'Error file at $path was not found' #if debug #else) #end;
+					#if fs_debug throw #else trace(#end 'Error file at $path was not found' #if fs_debug #else) #end;
 					done();
 				};
 			});
@@ -589,7 +588,9 @@ class Fs {
 			wasm.fs.unlinkSync(path);
 			var req = store.delete(path);
 			req.onsuccess = function(event) {
+				#if fs_debug
 				trace('Successfully deleted file $path');
+				#end
 			};
 			req.onerror = function(event) {
 				trace('Error file at $path was not found');
@@ -780,7 +781,7 @@ class Fs {
 						onDone();
 				};
 				var sucess = function(event) {
-					#if debug
+					#if fs_debug
 					trace('succeeded in writing $path');
 					#end
 					dbKeys.set(path, true);
